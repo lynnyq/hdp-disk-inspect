@@ -17,7 +17,6 @@ func MetricsHandler() http.Handler {
 	registerCollectorsOnce.Do(func() {
 		RegisterLLDPCollector()
 		RegisterNetworkCollector()
-		RegisterDiskCollector()
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
