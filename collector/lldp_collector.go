@@ -3,14 +3,15 @@ package collector
 import (
 	"bytes"
 	"encoding/xml"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"hdp-disk-inspect/utils"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/net/html/charset"
 )
 
 type lldpCollector struct {
@@ -21,7 +22,8 @@ func newLLDPCollector() *lldpCollector {
 	return &lldpCollector{
 		neighborInfo: prometheus.NewDesc("lldp_neighbor_info",
 			"LLDP neighbor information for the local interface.",
-			[]string{"local_host", "local_interface", "remote_chassis_id", "remote_chassis_name", "remote_chassis_description", "remote_chassis_mgmt_ip", "remote_port_id", "remote_port_description", "remote_port_ttl"},
+			// []string{"local_host", "local_interface", "local_interface_ip", "remote_chassis_id", "remote_chassis_name", "remote_chassis_description", "remote_chassis_mgmt_ip", "remote_port_id", "remote_port_description", "remote_port_ttl"},
+			[]string{"local_host", "local_interface", "local_interface_ip", "remote_chassis_id", "remote_chassis_name", "remote_chassis_mgmt_ip", "remote_port_id", "remote_port_description", "remote_port_ttl"},
 			nil,
 		),
 	}
@@ -49,7 +51,6 @@ func (collector *lldpCollector) Collect(ch chan<- prometheus.Metric) {
 	var lldp LLDPData
 
 	decoder := xml.NewDecoder(bytes.NewReader(out))
-	decoder.CharsetReader = charset.NewReaderLabel
 	err = decoder.Decode(&lldp)
 	if err != nil {
 		utils.Logger.WithError(err).WithField("raw_output", string(bytes.TrimSpace(out))).Error("failed to parse lldp xml")
@@ -62,15 +63,18 @@ func (collector *lldpCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for _, inf := range lldp.Interfaces {
+		localIfaceIP := safeString(getInterfaceIPs(inf.Name))
+
 		metric, err := prometheus.NewConstMetric(
 			collector.neighborInfo,
 			prometheus.GaugeValue,
 			1,
 			hostname,
 			safeString(inf.Name),
+			localIfaceIP,
 			safeString(inf.Chassis.ID),
 			safeString(inf.Chassis.Name),
-			safeString(inf.Chassis.Descr),
+			// safeString(inf.Chassis.Descr),
 			safeString(inf.Chassis.MgmtIP),
 			safeString(inf.Port.ID),
 			safeString(inf.Port.Descr),
@@ -88,6 +92,56 @@ func (collector *lldpCollector) Collect(ch chan<- prometheus.Metric) {
 
 func safeString(value string) string {
 	return strings.TrimSpace(value)
+}
+
+func getInterfaceIPs(ifaceName string) string {
+	if ifaceName == "" {
+		return ""
+	}
+
+	ifaceName = strings.TrimSpace(ifaceName)
+
+	masterIface := getInterfaceMaster(ifaceName)
+	if masterIface != "" {
+		// 如果是物理接口已被绑定在 bond 上，则从 master bond 取 ip
+		return getInterfaceIPs(masterIface)
+	}
+
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		utils.Logger.WithError(err).WithField("interface", ifaceName).Warn("failed to get interface by name")
+		return ""
+	}
+
+	addrs, err := iface.Addrs()
+	if err != nil {
+		utils.Logger.WithError(err).WithField("interface", ifaceName).Warn("failed to list addresses for interface")
+		return ""
+	}
+
+	var ips []string
+	for _, addr := range addrs {
+		ip, _, err := net.ParseCIDR(addr.String())
+		if err != nil {
+			continue
+		}
+		ips = append(ips, ip.String())
+	}
+
+	return strings.Join(ips, ",")
+}
+
+func getInterfaceMaster(ifaceName string) string {
+	masterPath := filepath.Join("/sys/class/net", ifaceName, "master")
+	link, err := os.Readlink(masterPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			utils.Logger.WithError(err).WithField("interface", ifaceName).Warn("failed to read master symlink")
+		}
+		return ""
+	}
+
+	return filepath.Base(link)
 }
 
 func RegisterLLDPCollector() {
