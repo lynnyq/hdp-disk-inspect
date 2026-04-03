@@ -1,7 +1,7 @@
 package collector
 
 import (
-	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,110 +13,166 @@ import (
 )
 
 type networkCollector struct {
-	interfaceUpDesc        *prometheus.Desc
-	interfaceSpeedDesc     *prometheus.Desc
-	interfaceRXBytesDesc   *prometheus.Desc
-	interfaceTXBytesDesc   *prometheus.Desc
-	interfaceRXPacketsDesc *prometheus.Desc
-	interfaceTXPacketsDesc *prometheus.Desc
-	interfaceRXErrorsDesc  *prometheus.Desc
-	interfaceTXErrorsDesc  *prometheus.Desc
-	bondSlaveLinkUpDesc    *prometheus.Desc
-	bondActiveSlaveDesc    *prometheus.Desc
-	bondSlaveSpeedDesc     *prometheus.Desc
-	bondSlaveLinkFailDesc  *prometheus.Desc
+	nodeNetworkReceiveBytesDesc       *prometheus.Desc
+	nodeNetworkTransmitBytesDesc      *prometheus.Desc
+	nodeNetworkReceivePacketsDesc     *prometheus.Desc
+	nodeNetworkTransmitPacketsDesc    *prometheus.Desc
+	nodeNetworkReceiveErrsDesc        *prometheus.Desc
+	nodeNetworkTransmitErrsDesc       *prometheus.Desc
+	nodeNetworkReceiveDropDesc        *prometheus.Desc
+	nodeNetworkTransmitDropDesc       *prometheus.Desc
+	nodeNetworkReceiveFifoDesc        *prometheus.Desc
+	nodeNetworkReceiveFrameDesc       *prometheus.Desc
+	nodeNetworkReceiveMulticastDesc   *prometheus.Desc
+	nodeNetworkTransmitCollsDesc      *prometheus.Desc
+	nodeNetworkTransmitCarrierDesc    *prometheus.Desc
+	nodeNetworkTransmitFifoDesc       *prometheus.Desc
+	nodeNetworkReceiveCompressedDesc  *prometheus.Desc
+	nodeNetworkTransmitCompressedDesc *prometheus.Desc
+	nodeNetworkReceiveNoHandlerDesc   *prometheus.Desc
+	nodeBondingSlavesDesc             *prometheus.Desc
+	nodeBondingActiveDesc             *prometheus.Desc
 }
 
 func newNetworkCollector() *networkCollector {
 	return &networkCollector{
-		interfaceUpDesc: prometheus.NewDesc(
-			"network_interface_up",
-			"Network interface operational status (1 = up, 0 = down).",
-			[]string{"interface"},
+		nodeNetworkReceiveBytesDesc: prometheus.NewDesc(
+			"node_network_receive_bytes_total",
+			"Network device receive bytes total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceSpeedDesc: prometheus.NewDesc(
-			"network_interface_speed_mbps",
-			"Network interface speed in Mbps.",
-			[]string{"interface"},
+		nodeNetworkTransmitBytesDesc: prometheus.NewDesc(
+			"node_network_transmit_bytes_total",
+			"Network device transmit bytes total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceRXBytesDesc: prometheus.NewDesc(
-			"network_interface_rx_bytes",
-			"Number of bytes received on the interface.",
-			[]string{"interface"},
+		nodeNetworkReceivePacketsDesc: prometheus.NewDesc(
+			"node_network_receive_packets_total",
+			"Network device receive packets total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceTXBytesDesc: prometheus.NewDesc(
-			"network_interface_tx_bytes",
-			"Number of bytes transmitted on the interface.",
-			[]string{"interface"},
+		nodeNetworkTransmitPacketsDesc: prometheus.NewDesc(
+			"node_network_transmit_packets_total",
+			"Network device transmit packets total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceRXPacketsDesc: prometheus.NewDesc(
-			"network_interface_rx_packets",
-			"Number of packets received on the interface.",
-			[]string{"interface"},
+		nodeNetworkReceiveErrsDesc: prometheus.NewDesc(
+			"node_network_receive_errs_total",
+			"Network device receive error packets total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceTXPacketsDesc: prometheus.NewDesc(
-			"network_interface_tx_packets",
-			"Number of packets transmitted on the interface.",
-			[]string{"interface"},
+		nodeNetworkTransmitErrsDesc: prometheus.NewDesc(
+			"node_network_transmit_errs_total",
+			"Network device transmit error packets total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceRXErrorsDesc: prometheus.NewDesc(
-			"network_interface_rx_errors",
-			"Number of receive errors on the interface.",
-			[]string{"interface"},
+		nodeNetworkReceiveDropDesc: prometheus.NewDesc(
+			"node_network_receive_drop_total",
+			"Network device receive dropped packets total.",
+			[]string{"device"},
 			nil,
 		),
-		interfaceTXErrorsDesc: prometheus.NewDesc(
-			"network_interface_tx_errors",
-			"Number of transmit errors on the interface.",
-			[]string{"interface"},
+		nodeNetworkTransmitDropDesc: prometheus.NewDesc(
+			"node_network_transmit_drop_total",
+			"Network device transmit dropped packets total.",
+			[]string{"device"},
 			nil,
 		),
-		bondSlaveLinkUpDesc: prometheus.NewDesc(
-			"bond_slave_link_up",
-			"Bond slave link state (1 = up, 0 = down).",
-			[]string{"bond", "slave"},
+		nodeNetworkReceiveFifoDesc: prometheus.NewDesc(
+			"node_network_receive_fifo_total",
+			"Network device receive FIFO errors total.",
+			[]string{"device"},
 			nil,
 		),
-		bondActiveSlaveDesc: prometheus.NewDesc(
-			"bond_active_slave",
-			"Active slave for the bond interface.",
-			[]string{"bond", "active_slave"},
+		nodeNetworkReceiveFrameDesc: prometheus.NewDesc(
+			"node_network_receive_frame_total",
+			"Network device receive frame errors total.",
+			[]string{"device"},
 			nil,
 		),
-		bondSlaveSpeedDesc: prometheus.NewDesc(
-			"bond_slave_speed_mbps",
-			"Bond slave link speed in Mbps.",
-			[]string{"bond", "slave"},
+		nodeNetworkReceiveMulticastDesc: prometheus.NewDesc(
+			"node_network_receive_multicast_total",
+			"Network device receive multicast packets total.",
+			[]string{"device"},
 			nil,
 		),
-		bondSlaveLinkFailDesc: prometheus.NewDesc(
-			"bond_slave_link_failures",
-			"Bond slave link failure count.",
-			[]string{"bond", "slave"},
+		nodeNetworkTransmitCollsDesc: prometheus.NewDesc(
+			"node_network_transmit_colls_total",
+			"Network device transmit collision packets total.",
+			[]string{"device"},
+			nil,
+		),
+		nodeNetworkTransmitCarrierDesc: prometheus.NewDesc(
+			"node_network_transmit_carrier_total",
+			"Network device transmit carrier packets total.",
+			[]string{"device"},
+			nil,
+		),
+		nodeNetworkTransmitFifoDesc: prometheus.NewDesc(
+			"node_network_transmit_fifo_total",
+			"Network device transmit FIFO errors total.",
+			[]string{"device"},
+			nil,
+		),
+		nodeNetworkReceiveCompressedDesc: prometheus.NewDesc(
+			"node_network_receive_compressed_total",
+			"Network device receive compressed packets total.",
+			[]string{"device"},
+			nil,
+		),
+		nodeNetworkTransmitCompressedDesc: prometheus.NewDesc(
+			"node_network_transmit_compressed_total",
+			"Network device transmit compressed packets total.",
+			[]string{"device"},
+			nil,
+		),
+		nodeNetworkReceiveNoHandlerDesc: prometheus.NewDesc(
+			"node_network_receive_nohandler_total",
+			"Network device receive nohandler packets total.",
+			[]string{"device"},
+			nil,
+		),
+		nodeBondingSlavesDesc: prometheus.NewDesc(
+			"node_bonding_slaves",
+			"Number of configured slaves per bonding interface.",
+			[]string{"master"},
+			nil,
+		),
+		nodeBondingActiveDesc: prometheus.NewDesc(
+			"node_bonding_active",
+			"Number of active slaves per bonding interface.",
+			[]string{"master"},
 			nil,
 		),
 	}
 }
 
 func (collector *networkCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- collector.interfaceUpDesc
-	ch <- collector.interfaceSpeedDesc
-	ch <- collector.interfaceRXBytesDesc
-	ch <- collector.interfaceTXBytesDesc
-	ch <- collector.interfaceRXPacketsDesc
-	ch <- collector.interfaceTXPacketsDesc
-	ch <- collector.interfaceRXErrorsDesc
-	ch <- collector.interfaceTXErrorsDesc
-	ch <- collector.bondSlaveLinkUpDesc
-	ch <- collector.bondActiveSlaveDesc
-	ch <- collector.bondSlaveSpeedDesc
-	ch <- collector.bondSlaveLinkFailDesc
+	ch <- collector.nodeNetworkReceiveBytesDesc
+	ch <- collector.nodeNetworkTransmitBytesDesc
+	ch <- collector.nodeNetworkReceivePacketsDesc
+	ch <- collector.nodeNetworkTransmitPacketsDesc
+	ch <- collector.nodeNetworkReceiveErrsDesc
+	ch <- collector.nodeNetworkTransmitErrsDesc
+	ch <- collector.nodeNetworkReceiveDropDesc
+	ch <- collector.nodeNetworkTransmitDropDesc
+	ch <- collector.nodeNetworkReceiveFifoDesc
+	ch <- collector.nodeNetworkReceiveFrameDesc
+	ch <- collector.nodeNetworkReceiveMulticastDesc
+	ch <- collector.nodeNetworkTransmitCollsDesc
+	ch <- collector.nodeNetworkTransmitCarrierDesc
+	ch <- collector.nodeNetworkTransmitFifoDesc
+	ch <- collector.nodeNetworkReceiveCompressedDesc
+	ch <- collector.nodeNetworkTransmitCompressedDesc
+	ch <- collector.nodeNetworkReceiveNoHandlerDesc
+	ch <- collector.nodeBondingSlavesDesc
+	ch <- collector.nodeBondingActiveDesc
 }
 
 func (collector *networkCollector) Collect(ch chan<- prometheus.Metric) {
@@ -128,109 +184,96 @@ func (collector *networkCollector) Collect(ch chan<- prometheus.Metric) {
 
 	for _, iface := range interfaces {
 		ifaceName := iface.Name()
-		state, err := readInterfaceOperState(ifaceName)
+		stats, err := readInterfaceStatistics(ifaceName)
 		if err != nil {
-			utils.Logger.WithError(err).WithField("interface", ifaceName).Debug("failed to read interface operstate")
+			utils.Logger.WithError(err).WithField("interface", ifaceName).Debug("failed to read interface statistics")
 			continue
 		}
-		value := 0.0
-		if state {
-			value = 1
-		}
-		ch <- prometheus.MustNewConstMetric(collector.interfaceUpDesc, prometheus.GaugeValue, value, ifaceName)
 
-		speed, err := readInterfaceSpeed(ifaceName)
-		if err == nil {
-			ch <- prometheus.MustNewConstMetric(collector.interfaceSpeedDesc, prometheus.GaugeValue, float64(speed), ifaceName)
-		}
-
-		stats, err := readInterfaceStatistics(ifaceName)
-		if err == nil {
-			ch <- prometheus.MustNewConstMetric(collector.interfaceRXBytesDesc, prometheus.GaugeValue, float64(stats.RXBytes), ifaceName)
-			ch <- prometheus.MustNewConstMetric(collector.interfaceTXBytesDesc, prometheus.GaugeValue, float64(stats.TXBytes), ifaceName)
-			ch <- prometheus.MustNewConstMetric(collector.interfaceRXPacketsDesc, prometheus.GaugeValue, float64(stats.RXPackets), ifaceName)
-			ch <- prometheus.MustNewConstMetric(collector.interfaceTXPacketsDesc, prometheus.GaugeValue, float64(stats.TXPackets), ifaceName)
-			ch <- prometheus.MustNewConstMetric(collector.interfaceRXErrorsDesc, prometheus.GaugeValue, float64(stats.RXErrors), ifaceName)
-			ch <- prometheus.MustNewConstMetric(collector.interfaceTXErrorsDesc, prometheus.GaugeValue, float64(stats.TXErrors), ifaceName)
-		}
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveBytesDesc, prometheus.CounterValue, float64(stats.RXBytes), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitBytesDesc, prometheus.CounterValue, float64(stats.TXBytes), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceivePacketsDesc, prometheus.CounterValue, float64(stats.RXPackets), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitPacketsDesc, prometheus.CounterValue, float64(stats.TXPackets), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveErrsDesc, prometheus.CounterValue, float64(stats.RXErrors), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitErrsDesc, prometheus.CounterValue, float64(stats.TXErrors), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveDropDesc, prometheus.CounterValue, float64(stats.RXDropped+stats.RXMissedErrors), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitDropDesc, prometheus.CounterValue, float64(stats.TXDropped), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveFifoDesc, prometheus.CounterValue, float64(stats.RXFIFO), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveFrameDesc, prometheus.CounterValue, float64(stats.RXFrame+stats.RXLengthErrors+stats.RXOverErrors+stats.RXCRCErrors), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveMulticastDesc, prometheus.CounterValue, float64(stats.Multicast), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitCollsDesc, prometheus.CounterValue, float64(stats.Collisions), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitCarrierDesc, prometheus.CounterValue, float64(stats.TXCarrierErrors+stats.TXAbortedErrors+stats.TXHeartbeatErrors+stats.TXWindowErrors), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitFifoDesc, prometheus.CounterValue, float64(stats.TXFIFO), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveCompressedDesc, prometheus.CounterValue, float64(stats.RXCompressed), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkTransmitCompressedDesc, prometheus.CounterValue, float64(stats.TXCompressed), ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkReceiveNoHandlerDesc, prometheus.CounterValue, float64(stats.RXNoHandler), ifaceName)
 	}
 
-	bondInfos, err := collectBondInfo()
+	bondStats, err := readBondingStats("/sys/class/net")
 	if err != nil {
-		utils.Logger.WithError(err).Debug("failed to collect bond info")
+		utils.Logger.WithError(err).Debug("failed to collect bonding stats")
 		return
 	}
 
-	for bondName, bond := range bondInfos {
-		if bond.ActiveSlave != "" {
-			ch <- prometheus.MustNewConstMetric(collector.bondActiveSlaveDesc, prometheus.GaugeValue, 1, bondName, bond.ActiveSlave)
-		}
-		for _, slave := range bond.Slaves {
-			linkUp := 0.0
-			if strings.EqualFold(slave.MIIStatus, "up") {
-				linkUp = 1
-			}
-			ch <- prometheus.MustNewConstMetric(collector.bondSlaveLinkUpDesc, prometheus.GaugeValue, linkUp, bondName, slave.Name)
-
-			speed, err := readInterfaceSpeed(slave.Name)
-			if err == nil {
-				ch <- prometheus.MustNewConstMetric(collector.bondSlaveSpeedDesc, prometheus.GaugeValue, float64(speed), bondName, slave.Name)
-			} else {
-				utils.Logger.WithError(err).WithFields(map[string]interface{}{"bond": bondName, "slave": slave.Name}).Debug("failed to read bond slave speed")
-			}
-
-			ch <- prometheus.MustNewConstMetric(collector.bondSlaveLinkFailDesc, prometheus.GaugeValue, float64(slave.LinkFailureCount), bondName, slave.Name)
-		}
+	for master, status := range bondStats {
+		ch <- prometheus.MustNewConstMetric(collector.nodeBondingSlavesDesc, prometheus.GaugeValue, float64(status[0]), master)
+		ch <- prometheus.MustNewConstMetric(collector.nodeBondingActiveDesc, prometheus.GaugeValue, float64(status[1]), master)
 	}
-}
-
-type bondInfo struct {
-	ActiveSlave string
-	Slaves      []bondSlave
-}
-
-type bondSlave struct {
-	Name             string
-	MIIStatus        string
-	LinkFailureCount int64
-}
-
-func readInterfaceOperState(iface string) (bool, error) {
-	data, err := os.ReadFile(filepath.Join("/sys/class/net", iface, "operstate"))
-	if err != nil {
-		return false, err
-	}
-	state := strings.TrimSpace(string(data))
-	return state == "up", nil
-}
-
-func readInterfaceSpeed(iface string) (int64, error) {
-	data, err := os.ReadFile(filepath.Join("/sys/class/net", iface, "speed"))
-	if err != nil {
-		return 0, err
-	}
-	speedStr := strings.TrimSpace(string(data))
-	return strconv.ParseInt(speedStr, 10, 64)
 }
 
 type interfaceStatistics struct {
-	RXBytes   int64
-	TXBytes   int64
-	RXPackets int64
-	TXPackets int64
-	RXErrors  int64
-	TXErrors  int64
+	RXBytes           int64
+	TXBytes           int64
+	RXPackets         int64
+	TXPackets         int64
+	RXErrors          int64
+	TXErrors          int64
+	RXDropped         int64
+	TXDropped         int64
+	Multicast         int64
+	Collisions        int64
+	RXFIFO            int64
+	TXFIFO            int64
+	RXFrame           int64
+	RXCompressed      int64
+	TXCompressed      int64
+	RXNoHandler       int64
+	RXMissedErrors    int64
+	RXLengthErrors    int64
+	RXOverErrors      int64
+	RXCRCErrors       int64
+	TXAbortedErrors   int64
+	TXCarrierErrors   int64
+	TXHeartbeatErrors int64
+	TXWindowErrors    int64
 }
 
 func readInterfaceStatistics(iface string) (*interfaceStatistics, error) {
 	stats := &interfaceStatistics{}
 	fields := map[string]*int64{
-		"rx_bytes":   &stats.RXBytes,
-		"tx_bytes":   &stats.TXBytes,
-		"rx_packets": &stats.RXPackets,
-		"tx_packets": &stats.TXPackets,
-		"rx_errors":  &stats.RXErrors,
-		"tx_errors":  &stats.TXErrors,
+		"rx_bytes":            &stats.RXBytes,
+		"tx_bytes":            &stats.TXBytes,
+		"rx_packets":          &stats.RXPackets,
+		"tx_packets":          &stats.TXPackets,
+		"rx_errors":           &stats.RXErrors,
+		"tx_errors":           &stats.TXErrors,
+		"rx_dropped":          &stats.RXDropped,
+		"tx_dropped":          &stats.TXDropped,
+		"multicast":           &stats.Multicast,
+		"collisions":          &stats.Collisions,
+		"rx_fifo_errors":      &stats.RXFIFO,
+		"rx_frame_errors":     &stats.RXFrame,
+		"rx_compressed":       &stats.RXCompressed,
+		"tx_compressed":       &stats.TXCompressed,
+		"rx_nohandler":        &stats.RXNoHandler,
+		"rx_missed_errors":    &stats.RXMissedErrors,
+		"rx_length_errors":    &stats.RXLengthErrors,
+		"rx_over_errors":      &stats.RXOverErrors,
+		"rx_crc_errors":       &stats.RXCRCErrors,
+		"tx_aborted_errors":   &stats.TXAbortedErrors,
+		"tx_carrier_errors":   &stats.TXCarrierErrors,
+		"tx_heartbeat_errors": &stats.TXHeartbeatErrors,
+		"tx_window_errors":    &stats.TXWindowErrors,
 	}
 
 	for name, ptr := range fields {
@@ -248,57 +291,36 @@ func readInterfaceStatistics(iface string) (*interfaceStatistics, error) {
 	return stats, nil
 }
 
-func collectBondInfo() (map[string]bondInfo, error) {
-	files, err := filepath.Glob("/proc/net/bonding/*")
+func readBondingStats(root string) (map[string][2]int, error) {
+	status := map[string][2]int{}
+	masters, err := os.ReadFile(filepath.Join(root, "bonding_masters"))
 	if err != nil {
 		return nil, err
 	}
-
-	bondInfos := make(map[string]bondInfo)
-	for _, path := range files {
-		content, err := os.ReadFile(path)
+	for _, master := range strings.Fields(string(masters)) {
+		slaves, err := os.ReadFile(filepath.Join(root, master, "bonding", "slaves"))
 		if err != nil {
-			utils.Logger.WithError(err).WithField("bond", filepath.Base(path)).Debug("failed to read bond file")
-			continue
+			return nil, err
 		}
-		bondName := filepath.Base(path)
-		bondInfos[bondName] = parseBondFile(string(content))
-	}
 
-	return bondInfos, nil
-}
-
-func parseBondFile(content string) bondInfo {
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	bond := bondInfo{}
-	var currentSlave *bondSlave
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "Active Slave:") {
-			bond.ActiveSlave = strings.TrimSpace(strings.TrimPrefix(line, "Active Slave:"))
-			continue
-		}
-		if strings.HasPrefix(line, "Slave Interface:") {
-			slaveName := strings.TrimSpace(strings.TrimPrefix(line, "Slave Interface:"))
-			bond.Slaves = append(bond.Slaves, bondSlave{Name: slaveName})
-			currentSlave = &bond.Slaves[len(bond.Slaves)-1]
-			continue
-		}
-		if currentSlave != nil && strings.HasPrefix(line, "MII Status:") {
-			currentSlave.MIIStatus = strings.TrimSpace(strings.TrimPrefix(line, "MII Status:"))
-			continue
-		}
-		if currentSlave != nil && strings.HasPrefix(line, "Link Failure Count:") {
-			countStr := strings.TrimSpace(strings.TrimPrefix(line, "Link Failure Count:"))
-			count, err := strconv.ParseInt(countStr, 10, 64)
-			if err == nil {
-				currentSlave.LinkFailureCount = count
+		sstat := [2]int{0, 0}
+		for _, slave := range strings.Fields(string(slaves)) {
+			sstat[0]++
+			state, err := os.ReadFile(filepath.Join(root, master, fmt.Sprintf("lower_%s", slave), "bonding_slave", "mii_status"))
+			if err != nil {
+				state, err = os.ReadFile(filepath.Join(root, master, fmt.Sprintf("slave_%s", slave), "bonding_slave", "mii_status"))
+			}
+			if err != nil {
+				return nil, err
+			}
+			if strings.TrimSpace(string(state)) == "up" {
+				sstat[1]++
 			}
 		}
+		status[master] = sstat
 	}
 
-	return bond
+	return status, nil
 }
 
 func RegisterNetworkCollector() {

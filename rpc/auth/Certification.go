@@ -41,6 +41,7 @@ func (c Certificate) GetTLSConfigForServer() (*tls.Config, error) {
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		Certificates: []tls.Certificate{certificate},
 		ClientCAs:    certPool,
+		NextProtos:   []string{"h2"},
 	}
 
 	return tlsConfig, nil
@@ -70,6 +71,7 @@ func (c Certificate) GetTransportCredsForClient() (credentials.TransportCredenti
 		ServerName:   c.ServerName,
 		Certificates: []tls.Certificate{certificate},
 		RootCAs:      certPool,
+		NextProtos:   []string{"h2"},
 	})
 
 	return transportCreds, nil
