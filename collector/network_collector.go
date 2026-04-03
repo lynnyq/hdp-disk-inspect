@@ -32,6 +32,7 @@ type networkCollector struct {
 	nodeNetworkReceiveNoHandlerDesc   *prometheus.Desc
 	nodeBondingSlavesDesc             *prometheus.Desc
 	nodeBondingActiveDesc             *prometheus.Desc
+	nodeNetworkInfoDesc               *prometheus.Desc
 }
 
 func newNetworkCollector() *networkCollector {
@@ -150,6 +151,12 @@ func newNetworkCollector() *networkCollector {
 			[]string{"master"},
 			nil,
 		),
+		nodeNetworkInfoDesc: prometheus.NewDesc(
+			"node_network_info",
+			"Non-numeric data about network interfaces.",
+			[]string{"device", "operstate", "speed", "duplex"},
+			nil,
+		),
 	}
 }
 
@@ -173,6 +180,7 @@ func (collector *networkCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- collector.nodeNetworkReceiveNoHandlerDesc
 	ch <- collector.nodeBondingSlavesDesc
 	ch <- collector.nodeBondingActiveDesc
+	ch <- collector.nodeNetworkInfoDesc
 }
 
 func (collector *networkCollector) Collect(ch chan<- prometheus.Metric) {
@@ -218,6 +226,12 @@ func (collector *networkCollector) Collect(ch chan<- prometheus.Metric) {
 	for master, status := range bondStats {
 		ch <- prometheus.MustNewConstMetric(collector.nodeBondingSlavesDesc, prometheus.GaugeValue, float64(status[0]), master)
 		ch <- prometheus.MustNewConstMetric(collector.nodeBondingActiveDesc, prometheus.GaugeValue, float64(status[1]), master)
+	}
+
+	for _, iface := range interfaces {
+		ifaceName := iface.Name()
+		operstate, speed, duplex := readInterfaceInfo(ifaceName)
+		ch <- prometheus.MustNewConstMetric(collector.nodeNetworkInfoDesc, prometheus.GaugeValue, 1, ifaceName, operstate, speed, duplex)
 	}
 }
 
@@ -321,6 +335,21 @@ func readBondingStats(root string) (map[string][2]int, error) {
 	}
 
 	return status, nil
+}
+
+func readInterfaceInfo(ifaceName string) (operstate, speed, duplex string) {
+	operstate = readSysfsFile(filepath.Join("/sys/class/net", ifaceName, "operstate"))
+	speed = readSysfsFile(filepath.Join("/sys/class/net", ifaceName, "speed"))
+	duplex = readSysfsFile(filepath.Join("/sys/class/net", ifaceName, "duplex"))
+	return
+}
+
+func readSysfsFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 func RegisterNetworkCollector() {
