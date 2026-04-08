@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"hdp-disk-inspect/utils"
@@ -146,16 +147,111 @@ func getInterfaceMaster(ifaceName string) string {
 }
 
 func getInterfaceSlot(ifaceName string) string {
-	devicePath := filepath.Join("/sys/class/net", ifaceName, "device")
-	link, err := os.Readlink(devicePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			utils.Logger.WithError(err).WithField("interface", ifaceName).Warn("failed to read device symlink")
-		}
+	// First try to get physical slot from dmidecode
+	if slot := getPhysicalSlotFromDmidecode(ifaceName); slot != "" {
+		return slot
+	}
+
+	// Fallback to PCI slot from lspci or sysfs
+	return getPciSlot(ifaceName)
+}
+
+func getPhysicalSlotFromDmidecode(ifaceName string) string {
+	pciAddr := getPciAddr(ifaceName)
+	if pciAddr == "" {
 		return ""
 	}
 
-	// link like ../../../0000:00:1f.6
+	// Extract bus number, assume slot ID = busNum + 1
+	parts := strings.Split(pciAddr, ":")
+	if len(parts) < 2 {
+		return ""
+	}
+	bus := parts[1]
+	busNum, err := strconv.Atoi(bus)
+	if err != nil {
+		return ""
+	}
+	expectedSlotID := busNum + 1
+
+	// Run dmidecode -t slot
+	cmd := exec.Command("dmidecode", "-t", "slot")
+	output, err := cmd.Output()
+	if err != nil {
+		utils.Logger.WithError(err).WithField("interface", ifaceName).Warn("failed to run dmidecode -t slot")
+		return ""
+	}
+
+	lines := strings.Split(string(output), "\n")
+	inSlot := false
+	var designation string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "System Slot Information") {
+			inSlot = true
+			designation = ""
+		}
+		if inSlot {
+			if strings.HasPrefix(line, "ID: ") {
+				idStr := strings.TrimSpace(strings.TrimPrefix(line, "ID: "))
+				if id, err := strconv.Atoi(idStr); err == nil && id == expectedSlotID {
+					// Found matching slot, return designation if available, else ID
+					if designation != "" {
+						return designation
+					}
+					return idStr
+				}
+			}
+			if strings.HasPrefix(line, "Designation: ") {
+				designation = strings.TrimSpace(strings.TrimPrefix(line, "Designation: "))
+			}
+		}
+		if inSlot && line == "" {
+			inSlot = false
+		}
+	}
+
+	return ""
+}
+
+func getPciSlot(ifaceName string) string {
+	pciAddr := getPciAddr(ifaceName)
+	if pciAddr == "" {
+		return ""
+	}
+
+	// Try lspci -s <pciAddr> -v | grep -i slot or something, but lspci doesn't have physical slot
+	// For now, just return the PCI address as slot
+	cmd := exec.Command("lspci", "-s", pciAddr)
+	err := cmd.Run()
+	if err == nil {
+		// If lspci succeeds, return pciAddr
+		return pciAddr
+	}
+
+	// Fallback to sysfs slot
+	slotPath := filepath.Join("/sys/bus/pci/devices", pciAddr, "slot")
+	slotData, err := os.ReadFile(slotPath)
+	if err == nil {
+		slot := strings.TrimSpace(string(slotData))
+		if slot != "" {
+			return slot
+		}
+	}
+
+	// Return simplified PCI address
+	if strings.HasPrefix(pciAddr, "0000:") {
+		return pciAddr[5:]
+	}
+	return pciAddr
+}
+
+func getPciAddr(ifaceName string) string {
+	devicePath := filepath.Join("/sys/class/net", ifaceName, "device")
+	link, err := os.Readlink(devicePath)
+	if err != nil {
+		return ""
+	}
 	parts := strings.Split(link, "/")
 	if len(parts) > 0 {
 		return parts[len(parts)-1]
