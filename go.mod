@@ -1,14 +1,15 @@
 module github.com/lynnyq/hdp-disk-inspect
 
-go 1.24.3
+go 1.25.0
 
 require (
 	github.com/Tang-RoseChild/mahonia v0.0.0-20131226213531-0eef680515cc
-	github.com/golang/protobuf v1.5.0
+	github.com/golang/protobuf v1.5.4
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sirupsen/logrus v1.4.2
-	golang.org/x/net v0.43.0
-	google.golang.org/grpc v1.21.0
+	golang.org/x/net v0.52.0
+	google.golang.org/grpc v1.81.1
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -21,8 +22,7 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
-	google.golang.org/genproto v0.0.0-20190530194941-fb225487d101 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
 )

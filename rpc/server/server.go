@@ -22,7 +22,9 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
-type Server struct{}
+type Server struct {
+	pb.UnimplementedTaskServer
+}
 
 var keepAlivePolicy = keepalive.EnforcementPolicy{
 	MinTime:             10 * time.Second,
@@ -42,15 +44,24 @@ func (s Server) Run(ctx context.Context, req *pb.TaskRequest) (*pb.TaskResponse,
 		}
 	}()
 	utils.Logger.Infof("execute cmd start: [id: %d cmd: %s]", req.Id, req.Command)
-	output, err := utils.ExecShell(ctx, req.Command)
+	result, err := utils.ExecShell(ctx, req.Command)
 	resp := new(pb.TaskResponse)
-	resp.Output = output
+
+	resp.StartTime = result.StartTime.UnixMilli()
+	resp.EndTime = result.EndTime.UnixMilli()
+	resp.DurationMs = result.DurationMs()
+	resp.Output = result.Stdout
+	resp.Stderr = result.Stderr
+	resp.ExitCode = int32(result.ExitCode)
+
 	if err != nil {
 		resp.Error = err.Error()
 	} else {
 		resp.Error = ""
 	}
-	utils.Logger.Infof("execute cmd end: [id: %d cmd: %s err: %s]", req.Id, req.Command, resp.Error)
+
+	utils.Logger.Infof("execute cmd end: [id: %d cmd: %s exit_code: %d duration_ms: %d]",
+		req.Id, req.Command, resp.ExitCode, resp.DurationMs)
 
 	return resp, nil
 }

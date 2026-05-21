@@ -31,7 +31,7 @@ func main() {
 	var enableTLS bool
 	var logLevel string
 	flag.BoolVar(&allowRoot, "allow-root", false, "./hdp-disk-inspect -allow-root")
-	flag.StringVar(&serverAddr, "s", "0.0.0.0:5921", "./hdp-disk-inspect -s ip:port")
+	flag.StringVar(&serverAddr, "s", "0.0.0.0:58002", "./hdp-disk-inspect -s ip:port")
 	flag.BoolVar(&version, "v", false, "./hdp-disk-inspect -v")
 	flag.BoolVar(&enableTLS, "enable-tls", false, "./hdp-disk-inspect -enable-tls")
 	flag.StringVar(&CAFile, "ca-file", "", "./hdp-disk-inspect -ca-file path")

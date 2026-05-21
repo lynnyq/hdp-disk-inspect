@@ -1,0 +1,61 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.dSYM/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# Build outputs
+hdp-disk-inspect
+hdp-disk-inspect-*
+*.log
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+.venv/
+env/
+venv/
+ENV/
+
+# Certificates and keys (keep these out of version control!)
+*.pem
+*.key
+*.crt
+*.p12
+certs/
+!server/generate_certs.sh
+!server/.gitignore

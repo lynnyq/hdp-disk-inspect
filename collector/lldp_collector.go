@@ -9,10 +9,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lynnyq/hdp-disk-inspect/utils"
 
 	"github.com/prometheus/client_golang/prometheus"
+)
+
+var (
+	slotCache   = make(map[string]string)
+	slotCacheMu sync.RWMutex
+	pciCache    = make(map[string]string)
+	pciCacheMu  sync.RWMutex
+	dmidecodeCache      string
+	dmidecodeCacheMu    sync.RWMutex
 )
 
 type lldpCollector struct {
@@ -147,13 +157,152 @@ func getInterfaceMaster(ifaceName string) string {
 }
 
 func getInterfaceSlot(ifaceName string) string {
-	// First try to get physical slot from dmidecode
-	if slot := getPhysicalSlotFromDmidecode(ifaceName); slot != "" {
+	if ifaceName == "" {
+		return ""
+	}
+
+	ifaceName = strings.TrimSpace(ifaceName)
+
+	slotCacheMu.RLock()
+	if slot, ok := slotCache[ifaceName]; ok {
+		slotCacheMu.RUnlock()
+		return slot
+	}
+	slotCacheMu.RUnlock()
+
+	masterIface := getInterfaceMaster(ifaceName)
+	if masterIface != "" && masterIface != ifaceName {
+		slot := getInterfaceSlot(masterIface)
+		slotCacheMu.Lock()
+		slotCache[ifaceName] = slot
+		slotCacheMu.Unlock()
 		return slot
 	}
 
-	// Fallback to PCI slot from lspci or sysfs
-	return getPciSlot(ifaceName)
+	var slot string
+
+	if slot = getSlotFromEthtool(ifaceName); slot != "" {
+		slotCacheMu.Lock()
+		slotCache[ifaceName] = slot
+		slotCacheMu.Unlock()
+		return slot
+	}
+
+	if slot = getSlotFromSysfs(ifaceName); slot != "" {
+		slotCacheMu.Lock()
+		slotCache[ifaceName] = slot
+		slotCacheMu.Unlock()
+		return slot
+	}
+
+	if slot = getPhysicalSlotFromDmidecode(ifaceName); slot != "" {
+		slotCacheMu.Lock()
+		slotCache[ifaceName] = slot
+		slotCacheMu.Unlock()
+		return slot
+	}
+
+	slot = getPciSlotFromLspci(ifaceName)
+	slotCacheMu.Lock()
+	slotCache[ifaceName] = slot
+	slotCacheMu.Unlock()
+	return slot
+}
+
+func getSlotFromEthtool(ifaceName string) string {
+	cmd := exec.Command("ethtool", "-i", ifaceName)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "bus-info:") {
+			busInfo := strings.TrimSpace(strings.TrimPrefix(line, "bus-info:"))
+			parts := strings.Split(busInfo, ":")
+			if len(parts) >= 2 {
+				domainBus := strings.Join(parts[len(parts)-2:], ":")
+				slot := extractSlotFromBusInfo(domainBus)
+				if slot != "" {
+					return slot
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+func extractSlotFromBusInfo(busInfo string) string {
+	parts := strings.Split(busInfo, ":")
+	if len(parts) < 3 {
+		return ""
+	}
+
+	slot := parts[len(parts)-1]
+	if slotNum, err := strconv.ParseInt(slot, 16, 64); err == nil {
+		return strconv.FormatInt(slotNum, 10)
+	}
+
+	return slot
+}
+
+func getSlotFromSysfs(ifaceName string) string {
+	pciAddr := getPciAddr(ifaceName)
+	if pciAddr == "" {
+		return ""
+	}
+
+	slotPath := filepath.Join("/sys/bus/pci/devices", pciAddr, "slot")
+	slotData, err := os.ReadFile(slotPath)
+	if err == nil {
+		slot := strings.TrimSpace(string(slotData))
+		if slot != "" && slot != "0" {
+			return slot
+		}
+	}
+
+	physfnPath := filepath.Join("/sys/bus/pci/devices", pciAddr, "physfn")
+	if _, err := os.Stat(physfnPath); err == nil {
+		link, err := os.Readlink(physfnPath)
+		if err == nil {
+			parts := strings.Split(link, "/")
+			if len(parts) > 0 {
+				physfnPci := parts[len(parts)-1]
+				if physfnPci != "" {
+					return getSlotFromSysfs(physfnPci)
+				}
+			}
+		}
+	}
+
+	sriovPath := filepath.Join("/sys/bus/pci/devices", pciAddr, "sriov")
+	if _, err := os.Stat(sriovPath); err == nil {
+		vfsPath := filepath.Join("/sys/bus/pci/devices", pciAddr, "physfn/net")
+		if vfLinks, err := os.ReadDir(vfsPath); err == nil {
+			for _, vfLink := range vfLinks {
+				if vfLink.Name() != ifaceName {
+					continue
+				}
+				vfNetPath := filepath.Join(vfsPath, vfLink.Name())
+				pcidevPath := filepath.Join(vfNetPath, "device")
+				link, err := os.Readlink(pcidevPath)
+				if err == nil {
+					vfPci := filepath.Base(link)
+					if vfPci != "" && vfPci != pciAddr {
+						slot := getSlotFromSysfs(vfPci)
+						if slot != "" {
+							return slot
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 func getPhysicalSlotFromDmidecode(ifaceName string) string {
@@ -162,84 +311,131 @@ func getPhysicalSlotFromDmidecode(ifaceName string) string {
 		return ""
 	}
 
-	// Extract bus number, assume slot ID = busNum + 1
-	parts := strings.Split(pciAddr, ":")
-	if len(parts) < 2 {
-		return ""
+	dmidecodeCacheMu.RLock()
+	if dmidecodeCache == "" {
+		dmidecodeCacheMu.RUnlock()
+		dmidecodeCacheMu.Lock()
+		if dmidecodeCache == "" {
+			cmd := exec.Command("dmidecode", "-t", "slot")
+			output, err := cmd.Output()
+			if err != nil {
+				utils.Logger.WithError(err).Warn("failed to run dmidecode -t slot")
+				dmidecodeCache = ""
+				dmidecodeCacheMu.Unlock()
+				return ""
+			}
+			dmidecodeCache = string(output)
+		}
+		dmidecodeCacheMu.Unlock()
+		dmidecodeCacheMu.RLock()
 	}
-	bus := parts[1]
-	busNum, err := strconv.Atoi(bus)
-	if err != nil {
-		return ""
-	}
-	expectedSlotID := busNum + 1
+	defer dmidecodeCacheMu.RUnlock()
 
-	// Run dmidecode -t slot
-	cmd := exec.Command("dmidecode", "-t", "slot")
-	output, err := cmd.Output()
-	if err != nil {
-		utils.Logger.WithError(err).WithField("interface", ifaceName).Warn("failed to run dmidecode -t slot")
+	if dmidecodeCache == "" {
 		return ""
 	}
 
-	lines := strings.Split(string(output), "\n")
+	busInfo := extractBusFromPciAddr(pciAddr)
+	expectedBusNum := -1
+	if busInfo != "" {
+		if busNum, err := strconv.ParseInt(busInfo, 16, 64); err == nil {
+			expectedBusNum = int(busNum)
+		}
+	}
+
+	lines := strings.Split(dmidecodeCache, "\n")
 	inSlot := false
-	var designation string
+	var currentDesignation string
+	var currentID string
+	var bestMatch string
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.Contains(line, "System Slot Information") {
 			inSlot = true
-			designation = ""
+			currentDesignation = ""
+			currentID = ""
+			continue
 		}
+
 		if inSlot {
 			if strings.HasPrefix(line, "ID: ") {
-				idStr := strings.TrimSpace(strings.TrimPrefix(line, "ID: "))
-				if id, err := strconv.Atoi(idStr); err == nil && id == expectedSlotID {
-					// Found matching slot, return designation if available, else ID
-					if designation != "" {
-						return designation
+				currentID = strings.TrimSpace(strings.TrimPrefix(line, "ID: "))
+				if expectedBusNum >= 0 {
+					if id, err := strconv.Atoi(currentID); err == nil && id == expectedBusNum+1 {
+						if currentDesignation != "" {
+							return currentDesignation
+						}
+						bestMatch = currentID
 					}
-					return idStr
 				}
 			}
 			if strings.HasPrefix(line, "Designation: ") {
-				designation = strings.TrimSpace(strings.TrimPrefix(line, "Designation: "))
+				currentDesignation = strings.TrimSpace(strings.TrimPrefix(line, "Designation: "))
+			}
+			if strings.HasPrefix(line, "Bus Address:") {
+				addrStr := strings.TrimSpace(strings.TrimPrefix(line, "Bus Address:"))
+				parts := strings.Split(addrStr, " ")
+				if len(parts) > 0 {
+					addrParts := strings.Split(parts[0], ":")
+					if len(addrParts) >= 2 {
+						if busNum, err := strconv.ParseInt(addrParts[1], 16, 64); err == nil {
+							if int(busNum) == expectedBusNum {
+								if currentDesignation != "" {
+									return currentDesignation
+								}
+								bestMatch = currentID
+							}
+						}
+					}
+				}
 			}
 		}
+
 		if inSlot && line == "" {
 			inSlot = false
 		}
 	}
 
+	return bestMatch
+}
+
+func extractBusFromPciAddr(pciAddr string) string {
+	parts := strings.Split(pciAddr, ":")
+	if len(parts) >= 2 {
+		return parts[1]
+	}
 	return ""
 }
 
-func getPciSlot(ifaceName string) string {
+func getPciSlotFromLspci(ifaceName string) string {
 	pciAddr := getPciAddr(ifaceName)
 	if pciAddr == "" {
 		return ""
 	}
 
-	// Try lspci -s <pciAddr> -v | grep -i slot or something, but lspci doesn't have physical slot
-	// For now, just return the PCI address as slot
-	cmd := exec.Command("lspci", "-s", pciAddr)
-	err := cmd.Run()
-	if err == nil {
-		// If lspci succeeds, return pciAddr
-		return pciAddr
+	cmd := exec.Command("lspci", "-s", pciAddr, "-v")
+	output, err := cmd.Output()
+	if err != nil {
+		return formatPciAddr(pciAddr)
 	}
 
-	// Fallback to sysfs slot
-	slotPath := filepath.Join("/sys/bus/pci/devices", pciAddr, "slot")
-	slotData, err := os.ReadFile(slotPath)
-	if err == nil {
-		slot := strings.TrimSpace(string(slotData))
-		if slot != "" {
-			return slot
+	outputStr := string(output)
+	lines := strings.Split(outputStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Slot:") {
+			slot := strings.TrimSpace(strings.TrimPrefix(line, "Slot:"))
+			if slot != "" {
+				return slot
+			}
 		}
 	}
 
-	// Return simplified PCI address
+	return formatPciAddr(pciAddr)
+}
+
+func formatPciAddr(pciAddr string) string {
 	if strings.HasPrefix(pciAddr, "0000:") {
 		return pciAddr[5:]
 	}
@@ -247,16 +443,30 @@ func getPciSlot(ifaceName string) string {
 }
 
 func getPciAddr(ifaceName string) string {
+	pciCacheMu.RLock()
+	if pci, ok := pciCache[ifaceName]; ok {
+		pciCacheMu.RUnlock()
+		return pci
+	}
+	pciCacheMu.RUnlock()
+
 	devicePath := filepath.Join("/sys/class/net", ifaceName, "device")
 	link, err := os.Readlink(devicePath)
 	if err != nil {
 		return ""
 	}
+
 	parts := strings.Split(link, "/")
+	pci := ""
 	if len(parts) > 0 {
-		return parts[len(parts)-1]
+		pci = parts[len(parts)-1]
 	}
-	return ""
+
+	pciCacheMu.Lock()
+	pciCache[ifaceName] = pci
+	pciCacheMu.Unlock()
+
+	return pci
 }
 
 func RegisterLLDPCollector() {

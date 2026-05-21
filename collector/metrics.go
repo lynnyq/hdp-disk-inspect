@@ -3,28 +3,41 @@ package collector
 import (
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/lynnyq/hdp-disk-inspect/utils"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var registerCollectorsOnce sync.Once
+var metricsRegistry *prometheus.Registry
 
-// MetricsHandler returns an HTTP handler that exposes Prometheus metrics on /metrics.
 func MetricsHandler() http.Handler {
+	registerCollectorsOnce.Do(func() {
+		metricsRegistry = prometheus.NewRegistry()
+		metricsRegistry.MustRegister(newLLDPCollector())
+		metricsRegistry.MustRegister(newNetworkCollector())
+		metricsRegistry.MustRegister(newDiskCollector())
+	})
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.HandlerFor(metricsRegistry, promhttp.HandlerOpts{
+		EnableOpenMetrics: false,
+	}))
+	return mux
+}
+
+func MetricsHandlerWithGoMetrics() http.Handler {
 	registerCollectorsOnce.Do(func() {
 		RegisterLLDPCollector()
 		RegisterNetworkCollector()
+		RegisterDiskCollector()
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	return mux
 }
 
-// StartMetricsServer starts an HTTP server on the specified address and exposes
-// Prometheus metrics on /metrics.
 func StartMetricsServer(addr string) {
 	if addr == "" {
 		return
@@ -35,7 +48,7 @@ func StartMetricsServer(addr string) {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: 5,
 	}
 
 	go func() {
