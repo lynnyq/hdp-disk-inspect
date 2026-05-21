@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hdp-disk-inspect/utils"
+	"github.com/lynnyq/hdp-disk-inspect/utils"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

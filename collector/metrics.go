@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"hdp-disk-inspect/utils"
+	"github.com/lynnyq/hdp-disk-inspect/utils"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

@@ -1,4 +1,4 @@
-module hdp-disk-inspect
+module github.com/lynnyq/hdp-disk-inspect
 
 go 1.24.3
 

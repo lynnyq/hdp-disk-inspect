@@ -8,10 +8,10 @@ import (
 	"runtime"
 	"strings"
 
-	"hdp-disk-inspect/collector"
-	"hdp-disk-inspect/rpc/auth"
-	"hdp-disk-inspect/rpc/server"
-	"hdp-disk-inspect/utils"
+	"github.com/lynnyq/hdp-disk-inspect/collector"
+	"github.com/lynnyq/hdp-disk-inspect/rpc/auth"
+	"github.com/lynnyq/hdp-disk-inspect/rpc/server"
+	"github.com/lynnyq/hdp-disk-inspect/utils"
 )
 
 var (

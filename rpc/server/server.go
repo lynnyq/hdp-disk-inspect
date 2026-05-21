@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"hdp-disk-inspect/rpc/auth"
-	pb "hdp-disk-inspect/rpc/proto"
-	"hdp-disk-inspect/utils"
+	"github.com/lynnyq/hdp-disk-inspect/rpc/auth"
+	pb "github.com/lynnyq/hdp-disk-inspect/rpc/proto"
+	"github.com/lynnyq/hdp-disk-inspect/utils"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
