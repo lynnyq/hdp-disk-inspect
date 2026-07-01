@@ -37,6 +37,15 @@ var keepAliveParams = keepalive.ServerParameters{
 	Timeout:           3 * time.Second,
 }
 
+// Int32Ptr 返回 int32 的指针
+func Int32Ptr(v int32) *int32 { return &v }
+
+// Int64Ptr 返回 int64 的指针
+func Int64Ptr(v int64) *int64 { return &v }
+
+// StrPtr 返回 string 的指针
+func StrPtr(v string) *string { return &v }
+
 func (s Server) Run(ctx context.Context, req *pb.TaskRequest) (*pb.TaskResponse, error) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -47,21 +56,21 @@ func (s Server) Run(ctx context.Context, req *pb.TaskRequest) (*pb.TaskResponse,
 	result, err := utils.ExecShell(ctx, req.Command)
 	resp := new(pb.TaskResponse)
 
-	resp.StartTime = result.StartTime.UnixMilli()
-	resp.EndTime = result.EndTime.UnixMilli()
-	resp.DurationMs = result.DurationMs()
-	resp.Output = result.Stdout
-	resp.Stderr = result.Stderr
-	resp.ExitCode = int32(result.ExitCode)
+	resp.StartTime = Int64Ptr(result.StartTime.UnixMilli())
+	resp.EndTime = Int64Ptr(result.EndTime.UnixMilli())
+	resp.DurationMs = Int64Ptr(result.DurationMs())
+	resp.Output = StrPtr(result.Stdout)
+	resp.Stderr = StrPtr(result.Stderr)
+	resp.ExitCode = Int32Ptr(int32(result.ExitCode))
 
 	if err != nil {
-		resp.Error = err.Error()
+		resp.Error = StrPtr(err.Error())
 	} else {
-		resp.Error = ""
+		resp.Error = StrPtr("")
 	}
 
 	utils.Logger.Infof("execute cmd end: [id: %d cmd: %s exit_code: %d duration_ms: %d]",
-		req.Id, req.Command, resp.ExitCode, resp.DurationMs)
+		req.Id, req.Command, resp.GetExitCode(), resp.GetDurationMs())
 
 	return resp, nil
 }

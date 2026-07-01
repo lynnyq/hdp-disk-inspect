@@ -15,11 +15,11 @@ message TaskRequest {
 }
 
 message TaskResponse {
-    string output = 1;      // 标准输出(stdout)
-    string stderr = 5;      // 标准错误输出(stderr)
-    string error = 2;       // 执行错误信息
-    int32 exit_code = 3;    // 退出码
-    int64 start_time = 6;    // 开始执行时间戳(毫秒)
-    int64 end_time = 7;      // 结束执行时间戳(毫秒)
-    int64 duration_ms = 4;   // 执行耗时(毫秒)
+    optional string output = 1;      // 标准输出(stdout)
+    optional string stderr = 5;      // 标准错误输出(stderr)
+    optional string error = 2;       // 执行错误信息
+    optional int32 exit_code = 3;    // 退出码
+    optional int64 start_time = 6;   // 开始执行时间戳(毫秒)
+    optional int64 end_time = 7;     // 结束执行时间戳(毫秒)
+    optional int64 duration_ms = 4;  // 执行耗时(毫秒)
 }
